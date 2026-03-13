@@ -1,0 +1,21 @@
+﻿<Window x:Class="SupMail.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Priority Outlook Link" Height="250" Width="400" Background="#F3F3F3" WindowStartupLocation="CenterScreen">
+    <Grid Margin="30">
+        <StackPanel>
+            <TextBlock Text="Document Number" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBox Name="txtDocNumber" Height="35" VerticalContentAlignment="Center" FontSize="16" Margin="0,0,0,15"/>
+
+            <Button Name="btnProcess" Content="Generate Outlook Draft" 
+                    Height="40" Background="#0078D4" Foreground="White" BorderThickness="0"
+                    Click="btnProcess_Click"/>
+
+            <TextBlock Name="lblStatus" Margin="0,10,0,0" HorizontalAlignment="Center" Foreground="Gray"/>
+
+            <TextBlock HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Hyperlink Click="OpenSettings_Click">Settings</Hyperlink>
+            </TextBlock>
+        </StackPanel>
+    </Grid>
+</Window>
