@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -83,6 +85,22 @@ namespace SupMail
                 if (attachments == null || attachments.Count == 0)
                     throw new Exception("No files found.");
 
+                var fileItems = new List<FileItem>();
+                for (int i = 0; i < attachments.Count; i++)
+                {
+                    string? name = attachments[i]["EXTFILEDES"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(name))
+                        name = $"Attachment {i + 1}";
+                    fileItems.Add(new FileItem { DisplayName = name, Index = i });
+                }
+
+                var selectionWindow = new FileSelectionWindow(fileItems);
+                selectionWindow.Owner = this;
+                if (selectionWindow.ShowDialog() != true || !selectionWindow.Confirmed)
+                    throw new Exception("File selection was cancelled.");
+
+                var selectedIndices = selectionWindow.GetSelectedIndices();
+
                 Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
                 if (outlookType == null) throw new Exception("Outlook is not installed.");
 
@@ -90,11 +108,11 @@ namespace SupMail
                 dynamic mail = outlookApp.CreateItem(0); // 0 = olMailItem
                 mail.To = recipient;
                 mail.Subject = $"Purchase Order {docNum}";
-                                
 
                 int addedAttachments = 0;
-                foreach (var file in attachments)
+                foreach (int idx in selectedIndices)
                 {
+                    var file = attachments[idx];
                     string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
                     if (string.IsNullOrWhiteSpace(sourcePath))
                         continue;
