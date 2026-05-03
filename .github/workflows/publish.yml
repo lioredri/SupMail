@@ -32,10 +32,10 @@ jobs:
         run: dotnet restore SupMail/SupMail.csproj -r win-x64
 
       - name: Build
-        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64
+        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained
 
       - name: Publish
-        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --self-contained false -p:PublishSingleFile=true -p:UseAppHost=true
+        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:UseAppHost=true
 
       - name: Create Release Artifact
         uses: actions/upload-artifact@v4
