@@ -25,13 +25,18 @@
 			</Grid>
 
 			<Button Name="btnTest" Content="Test Connection" Click="btnTest_Click"
-                    Height="35" Background="Transparent" BorderBrush="#0078D4" Foreground="#0078D4" Margin="0,0,0,10">
+					Height="35" Background="Transparent" BorderBrush="#0078D4" Foreground="#0078D4" Margin="0,0,0,8">
 				<Button.Resources>
 					<Style TargetType="Border">
 						<Setter Property="CornerRadius" Value="4"/>
 					</Style>
 				</Button.Resources>
 			</Button>
+
+			<StackPanel Name="pnlTestStatus" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+				<Ellipse Name="ellipseStatus" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"/>
+				<TextBlock Name="lblTestStatus" VerticalAlignment="Center" FontWeight="SemiBold"/>
+			</StackPanel>
 
 			<Button Content="Save &amp; Close" Click="Save_Click" FontWeight="Bold"
                     Height="40" Background="#0078D4" Foreground="White" BorderThickness="0">

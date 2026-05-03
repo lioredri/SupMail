@@ -31,7 +31,7 @@ namespace SupMail
             string docNum = txtDocNumber.Text.Trim();
             if (string.IsNullOrEmpty(docNum)) return;
 
-            if (string.IsNullOrEmpty(Properties.Settings.Default.ApiUrl))
+            if (string.IsNullOrEmpty(AppSettings.Current.ApiUrl))
             {
                 MessageBox.Show("Please configure settings first.");
                 return;
@@ -60,10 +60,10 @@ namespace SupMail
         {
             using (HttpClient client = new HttpClient())
             {
-                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{Properties.Settings.Default.Username}:{Properties.Settings.Default.Password}"));
+                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{AppSettings.Current.Username}:{AppSettings.Current.Password}"));
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
 
-                string url = $"{Properties.Settings.Default.ApiUrl.TrimEnd('/')}/PORDERS('{docNum}')?$select=ORDNAME,AMAIL&$expand=ITML_SUPMAIL_SUBFORM";
+                string url = $"{AppSettings.Current.ApiUrl.TrimEnd('/')}/PORDERS('{docNum}')?$select=ORDNAME,AMAIL&$expand=ITML_SUPMAIL_SUBFORM";
 
                 System.Diagnostics.Debug.WriteLine($"[REQUEST URL]: {url}");
 
@@ -173,7 +173,7 @@ namespace SupMail
                 .TrimStart('.')
                 .TrimStart('/');
 
-            string requestUrl = $"{Properties.Settings.Default.ApiUrl.TrimEnd('/')}/{relativePath}";
+            string requestUrl = $"{AppSettings.Current.ApiUrl.TrimEnd('/')}/{relativePath}";
             var response = await client.GetAsync(requestUrl);
             string responseBody = await response.Content.ReadAsStringAsync();
 
