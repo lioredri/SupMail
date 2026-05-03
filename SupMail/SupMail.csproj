@@ -8,7 +8,7 @@
 		<UseWPF>true</UseWPF>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
-		<Version>1.2.0</Version>
+		<Version>1.2</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
