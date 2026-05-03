@@ -1,0 +1,59 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+    types:
+      - closed
+
+jobs:
+  build-and-publish:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore SupMail/SupMail.csproj
+
+      - name: Build
+        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish SupMail/SupMail.csproj --configuration Release --output ./publish --no-build --self-contained false
+
+      - name: Create Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SupMail-Release-${{ github.sha }}
+          path: ./publish/**/*
+          retention-days: 90
+
+      - name: Zip Release
+        run: Compress-Archive -Path ./publish/* -DestinationPath SupMail-Release.zip
+
+      - name: Create GitHub Release (on push to master)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          body: |
+            Automated release from master branch
+            Commit: ${{ github.sha }}
+          files: SupMail-Release.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
