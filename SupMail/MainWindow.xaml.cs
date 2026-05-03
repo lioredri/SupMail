@@ -7,7 +7,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
-using SupMail.Properties;
 using Newtonsoft.Json.Linq;
 
 namespace SupMail
@@ -31,7 +30,7 @@ namespace SupMail
             string docNum = txtDocNumber.Text.Trim();
             if (string.IsNullOrEmpty(docNum)) return;
 
-            if (string.IsNullOrEmpty(Properties.Settings.Default.ApiUrl))
+            if (string.IsNullOrEmpty(AppSettings.Current.ApiUrl))
             {
                 MessageBox.Show("Please configure settings first.");
                 return;
@@ -60,10 +59,10 @@ namespace SupMail
         {
             using (HttpClient client = new HttpClient())
             {
-                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{Properties.Settings.Default.Username}:{Properties.Settings.Default.Password}"));
+                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{AppSettings.Current.Username}:{AppSettings.Current.Password}"));
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
 
-                string url = $"{Properties.Settings.Default.ApiUrl.TrimEnd('/')}/PORDERS('{docNum}')?$select=ORDNAME,AMAIL&$expand=ITML_SUPMAIL_SUBFORM";
+                string url = $"{AppSettings.Current.ApiUrl.TrimEnd('/')}/PORDERS('{docNum}')?$select=ORDNAME,AMAIL&$expand=ITML_SUPMAIL_SUBFORM";
 
                 System.Diagnostics.Debug.WriteLine($"[REQUEST URL]: {url}");
 
@@ -91,10 +90,24 @@ namespace SupMail
                     string? name = attachments[i]["EXTFILEDES"]?.ToString();
                     if (string.IsNullOrWhiteSpace(name))
                         name = $"Attachment {i + 1}";
-                    fileItems.Add(new FileItem { DisplayName = name, Index = i });
+                    string fileSize = GetFileSizeDisplay(attachments[i]);
+                    fileItems.Add(new FileItem { DisplayName = name, FileSize = fileSize, Index = i });
                 }
 
-                var selectionWindow = new FileSelectionWindow(fileItems);
+                Func<int, Task<string>> fileResolver = async (idx) =>
+                {
+                    var file = attachments[idx];
+                    string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(sourcePath))
+                        throw new Exception("No path available for this attachment.");
+                    if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                        return await SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                    if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
+                        return await DownloadSystemAttachmentAsync(client, sourcePath);
+                    return sourcePath;
+                };
+
+                var selectionWindow = new FileSelectionWindow(fileItems, docNum, fileResolver);
                 selectionWindow.Owner = this;
                 if (selectionWindow.ShowDialog() != true || !selectionWindow.Confirmed)
                     throw new Exception("File selection was cancelled.");
@@ -145,6 +158,51 @@ namespace SupMail
             }
         }
 
+        private static string GetFileSizeDisplay(JToken attachment)
+        {
+            // 1. Try known Priority / generic size field names
+                string? sizeStr = attachment["EXTFILESIZE"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(sizeStr) && long.TryParse(sizeStr, out long sz) && sz > 0)
+                    return FormatFileSize(sz);
+            string? path = attachment["PATH"]?.ToString()
+                        ?? attachment["EXTFILENAME"]?.ToString();
+
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            // 2. data: URI — estimate from base64 payload length
+            if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                int commaIdx = path.IndexOf(',');
+                if (commaIdx >= 0)
+                    return FormatFileSize((long)((path.Length - commaIdx - 1) * 0.75));
+            }
+
+            // 3. Direct (local/UNC) file path — read from disk
+            if (!path.StartsWith("../../", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var info = new FileInfo(path);
+                    if (info.Exists)
+                        return FormatFileSize(info.Length);
+                }
+                catch { }
+            }
+
+            // 4. system path — size not available without downloading
+            return string.Empty;
+        }
+
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes >= 1024 * 1024)
+                return $"{bytes / (1024.0 * 1024.0):F1} MB";
+            if (bytes >= 1024)
+                return $"{bytes / 1024.0:F1} KB";
+            return $"{bytes} B";
+        }
+
         private async Task<string> SaveDataUriToTempFileAsync(string dataUri, string? fileDescription)
         {
             string? base64 = NormalizeBase64(dataUri);
@@ -173,7 +231,7 @@ namespace SupMail
                 .TrimStart('.')
                 .TrimStart('/');
 
-            string requestUrl = $"{Properties.Settings.Default.ApiUrl.TrimEnd('/')}/{relativePath}";
+            string requestUrl = $"{AppSettings.Current.ApiUrl.TrimEnd('/')}/{relativePath}";
             var response = await client.GetAsync(requestUrl);
             string responseBody = await response.Content.ReadAsStringAsync();
 
