@@ -47,15 +47,14 @@ jobs:
       - name: Zip Release
         run: Compress-Archive -Path ./publish/* -DestinationPath SupMail-Release.zip
 
-      - name: Get version from tag
+      - name: Get version from Project
         id: get_version
+        shell: pwsh
         run: |
-          if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=v0.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
+          [xml]$project = Get-Content SupMail/SupMail.csproj
+          $ver = $project.Project.PropertyGroup.Version
+          if ($null -eq $ver) { $ver = "0.0" }
+          echo "version=v$ver.${{ github.run_number }}" >> $env:GITHUB_OUTPUT
 
       - name: Create GitHub Release (on push to master)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
