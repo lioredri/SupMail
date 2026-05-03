@@ -9,13 +9,14 @@ on:
       - master
     types:
       - closed
+  workflow_dispatch:
 
 permissions:
   contents: write
   
 jobs:
   build-and-publish:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:
@@ -55,6 +56,11 @@ jobs:
           body: |
             Automated release from master branch
             Commit: ${{ github.sha }}
+            
+            ## Requirements
+            - Windows 10/11 (64-bit)
+            - [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime) - Download "Desktop Runtime x64"
+            - Microsoft Outlook (2016 or later)
           files: SupMail-Release.zip
           draft: false
           prerelease: false
