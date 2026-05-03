@@ -85,33 +85,16 @@ namespace SupMail
                 if (attachments == null || attachments.Count == 0)
                     throw new Exception("No files found.");
 
-                if (attachments.Count > 0)
-                    System.Diagnostics.Debug.WriteLine($"[ATTACHMENT FIELDS]: {attachments[0]}");
-
                 var fileItems = new List<FileItem>();
                 for (int i = 0; i < attachments.Count; i++)
                 {
                     string? name = attachments[i]["EXTFILEDES"]?.ToString();
                     if (string.IsNullOrWhiteSpace(name))
                         name = $"Attachment {i + 1}";
-                    string fileSize = GetFileSizeDisplay(attachments[i]);
-                    fileItems.Add(new FileItem { DisplayName = name, FileSize = fileSize, Index = i });
+                    fileItems.Add(new FileItem { DisplayName = name, Index = i });
                 }
 
-                Func<int, Task<string>> fileResolver = async (idx) =>
-                {
-                    var file = attachments[idx];
-                    string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(sourcePath))
-                        throw new Exception("No path available for this attachment.");
-                    if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                        return await SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
-                    if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                        return await DownloadSystemAttachmentAsync(client, sourcePath);
-                    return sourcePath;
-                };
-
-                var selectionWindow = new FileSelectionWindow(fileItems, docNum, fileResolver);
+                var selectionWindow = new FileSelectionWindow(fileItems);
                 selectionWindow.Owner = this;
                 if (selectionWindow.ShowDialog() != true || !selectionWindow.Confirmed)
                     throw new Exception("File selection was cancelled.");
@@ -160,51 +143,6 @@ namespace SupMail
 
                 mail.Display();
             }
-        }
-
-        private static string GetFileSizeDisplay(JToken attachment)
-        {
-            // 1. Try known Priority / generic size field names
-                string? sizeStr = attachment["EXTFILESIZE"]?.ToString();
-                if (!string.IsNullOrWhiteSpace(sizeStr) && long.TryParse(sizeStr, out long sz) && sz > 0)
-                    return FormatFileSize(sz);
-            string? path = attachment["PATH"]?.ToString()
-                        ?? attachment["EXTFILENAME"]?.ToString();
-
-            if (string.IsNullOrWhiteSpace(path))
-                return string.Empty;
-
-            // 2. data: URI — estimate from base64 payload length
-            if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-            {
-                int commaIdx = path.IndexOf(',');
-                if (commaIdx >= 0)
-                    return FormatFileSize((long)((path.Length - commaIdx - 1) * 0.75));
-            }
-
-            // 3. Direct (local/UNC) file path — read from disk
-            if (!path.StartsWith("../../", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var info = new FileInfo(path);
-                    if (info.Exists)
-                        return FormatFileSize(info.Length);
-                }
-                catch { }
-            }
-
-            // 4. system path — size not available without downloading
-            return string.Empty;
-        }
-
-        private static string FormatFileSize(long bytes)
-        {
-            if (bytes >= 1024 * 1024)
-                return $"{bytes / (1024.0 * 1024.0):F1} MB";
-            if (bytes >= 1024)
-                return $"{bytes / 1024.0:F1} KB";
-            return $"{bytes} B";
         }
 
         private async Task<string> SaveDataUriToTempFileAsync(string dataUri, string? fileDescription)
