@@ -23,25 +23,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore SupMail/SupMail.csproj -r win-x64
-
-      - name: Build
-        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained
-
-      - name: Publish
-        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:UseAppHost=true
-
-      - name: Create Release Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SupMail-Release-${{ github.sha }}
-          path: ./publish/**/*
-          retention-days: 90
-
-      - name: Zip Release
-        run: Compress-Archive -Path ./publish/* -DestinationPath SupMail-Release.zip
-
+      # MOVE THIS UP: Define the version BEFORE you try to use it
       - name: Get version from Project
         id: get_version
         shell: pwsh
@@ -49,28 +31,38 @@ jobs:
           [xml]$project = Get-Content SupMail/SupMail.csproj
           $ver = $project.Project.PropertyGroup.Version
           if ($null -eq $ver) { $ver = "0.0" }
-          echo "version=v$ver.${{ github.run_number }}" >> $env:GITHUB_OUTPUT
+          
+          if ("${{ github.ref_type }}" -eq "tag") {
+              $finalVersion = "${{ github.ref_name }}"
+          } else {
+              $finalVersion = "v$ver.${{ github.run_number }}"
+          }
+          echo "version=$finalVersion" >> $env:GITHUB_OUTPUT
 
-      - name: Create GitHub Release (on push to master)
+      - name: Restore dependencies
+        run: dotnet restore SupMail/SupMail.csproj -r win-x64
+
+      - name: Build
+        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained
+
+      - name: Publish
+        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:UseAppHost=true -p:DebugType=none -p:CopyOutputSymbolsToPublishDirectory=false
+
+      # Use the version in the Release step
+      - name: Create GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Release ${{ steps.get_version.outputs.version }}
+          files: ./publish/SupMail.exe
           body: |
             Automated release from master branch
             Commit: ${{ github.sha }}
             
-            ## Installation Instructions
-            1. Download `SupMail-Release.zip`
-            2. Extract and run `SupMail.exe`
-            
             ## Requirements
             - Windows 10/11 (64-bit)
-            - [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime) - Download "Desktop Runtime x64"
+            - [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime)
             - Microsoft Outlook (2016 or later)
-          files: SupMail-Release.zip
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
