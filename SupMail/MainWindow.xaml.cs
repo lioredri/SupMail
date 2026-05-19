@@ -108,7 +108,7 @@ namespace SupMail
                     if (string.IsNullOrWhiteSpace(sourcePath))
                         throw new Exception("No path available for this attachment.");
                     if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                        return await SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                        return await SaveDataUriToTempFileAsync(sourcePath);
                     if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
                         return await DownloadSystemAttachmentAsync(client, sourcePath, displayName);
                     return sourcePath;
@@ -141,7 +141,7 @@ namespace SupMail
                     string fullPath = sourcePath;
                     if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                     {
-                        fullPath = await SaveDataUriToTempFileAsync(sourcePath, displayName);
+                        fullPath = await SaveDataUriToTempFileAsync(sourcePath);
                     }
                     else if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
                     {
@@ -210,7 +210,7 @@ namespace SupMail
             return $"{bytes} B";
         }
 
-        private async Task<string> SaveDataUriToTempFileAsync(string dataUri, string? fileDescription)
+        private async Task<string> SaveDataUriToTempFileAsync(string dataUri)
         {
             string? base64 = NormalizeBase64(dataUri);
             if (string.IsNullOrWhiteSpace(base64))
@@ -221,10 +221,7 @@ namespace SupMail
             string tempFolder = Path.Combine(Path.GetTempPath(), "SupMail", "Attachments");
             Directory.CreateDirectory(tempFolder);
 
-            string fileName = !string.IsNullOrWhiteSpace(fileDescription)
-                ? fileDescription
-                : $"attachment-{Guid.NewGuid():N}.bin";
-            string tempFile = Path.Combine(tempFolder, $"{fileName}");
+            string tempFile = Path.Combine(tempFolder, $"{Guid.NewGuid():N}.bin");
             await File.WriteAllBytesAsync(tempFile, bytes);
 
             return tempFile;
