@@ -87,23 +87,30 @@ namespace SupMail
                 var fileItems = new List<FileItem>();
                 for (int i = 0; i < attachments.Count; i++)
                 {
-                    string? name = attachments[i]["EXTFILEDES"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(name))
-                        name = $"Attachment {i + 1}";
+                    string? displayName = attachments[i]["EXTFILEDES"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(displayName))
+                        displayName = $"Attachment {i + 1}";
+
                     string fileSize = GetFileSizeDisplay(attachments[i]);
-                    fileItems.Add(new FileItem { DisplayName = name, FileSize = fileSize, Index = i });
+                    fileItems.Add(new FileItem 
+                    { 
+                        DisplayName = displayName, 
+                        FileSize = fileSize, 
+                        Index = i
+                    });
                 }
 
                 Func<int, Task<string>> fileResolver = async (idx) =>
                 {
                     var file = attachments[idx];
                     string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
+                    string? displayName = file["EXTFILEDES"]?.ToString();
                     if (string.IsNullOrWhiteSpace(sourcePath))
                         throw new Exception("No path available for this attachment.");
                     if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                        return await SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                        return await SaveDataUriToTempFileAsync(sourcePath);
                     if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                        return await DownloadSystemAttachmentAsync(client, sourcePath);
+                        return await DownloadSystemAttachmentAsync(client, sourcePath, displayName);
                     return sourcePath;
                 };
 
@@ -127,22 +134,22 @@ namespace SupMail
                 {
                     var file = attachments[idx];
                     string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
+                    string? displayName = file["EXTFILEDES"]?.ToString();
                     if (string.IsNullOrWhiteSpace(sourcePath))
                         continue;
 
                     string fullPath = sourcePath;
                     if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                     {
-                        fullPath = await SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                        fullPath = await SaveDataUriToTempFileAsync(sourcePath);
                     }
                     else if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
                     {
-                        fullPath = await DownloadSystemAttachmentAsync(client, sourcePath);
+                        fullPath = await DownloadSystemAttachmentAsync(client, sourcePath, displayName);
                     }
 
                     if (File.Exists(fullPath))
                     {
-                        string? displayName = file["EXTFILEDES"]?.ToString();
                         if (!string.IsNullOrWhiteSpace(displayName))
                             mail.Attachments.Add(fullPath, 1, Type.Missing, displayName);
                         else
@@ -203,7 +210,7 @@ namespace SupMail
             return $"{bytes} B";
         }
 
-        private async Task<string> SaveDataUriToTempFileAsync(string dataUri, string? fileDescription)
+        private async Task<string> SaveDataUriToTempFileAsync(string dataUri)
         {
             string? base64 = NormalizeBase64(dataUri);
             if (string.IsNullOrWhiteSpace(base64))
@@ -211,26 +218,26 @@ namespace SupMail
 
             byte[] bytes = Convert.FromBase64String(base64);
 
-            string fileName = !string.IsNullOrWhiteSpace(fileDescription)
-                ? fileDescription
-                : $"attachment-{Guid.NewGuid():N}.bin";
-
             string tempFolder = Path.Combine(Path.GetTempPath(), "SupMail", "Attachments");
             Directory.CreateDirectory(tempFolder);
 
-            string tempFile = Path.Combine(tempFolder, $"{Guid.NewGuid():N}_{fileName}");
+            string tempFile = Path.Combine(tempFolder, $"{Guid.NewGuid():N}.bin");
             await File.WriteAllBytesAsync(tempFile, bytes);
 
             return tempFile;
         }
 
-        private async Task<string> DownloadSystemAttachmentAsync(HttpClient client, string systemPath)
+        private async Task<string> DownloadSystemAttachmentAsync(HttpClient client, string systemPath, string? intendedFileName)
         {
-            string relativePath = systemPath
-                .Replace('\\', '/')
+            // Extract the actual filename from the original path
+            // Handle both forward and backslashes
+            string normalizedPath = systemPath.Replace("\\", "/");
+            string originalFileName = normalizedPath.Split('/').LastOrDefault() ?? string.Empty;
+
+            string relativePath = normalizedPath
                 .TrimStart('.')
                 .TrimStart('/');
-
+            
             string requestUrl = $"{AppSettings.Current.ApiUrl.TrimEnd('/')}/{relativePath}";
             var response = await client.GetAsync(requestUrl);
             string responseBody = await response.Content.ReadAsStringAsync();
@@ -244,14 +251,17 @@ namespace SupMail
 
             byte[] bytes = Convert.FromBase64String(base64);
 
-            string fileName = Path.GetFileName(systemPath.Replace('\\', '/'));
-            if (string.IsNullOrWhiteSpace(fileName))
-                fileName = $"attachment-{Guid.NewGuid():N}.bin";
+            // Use the intended filename if provided, otherwise fallback to the original filename or a generic one
+            string fileName = !string.IsNullOrWhiteSpace(intendedFileName)
+                ? intendedFileName
+                : (!string.IsNullOrWhiteSpace(originalFileName)
+                    ? originalFileName
+                    : $"attachment-{Guid.NewGuid():N}.bin");
 
             string tempFolder = Path.Combine(Path.GetTempPath(), "SupMail", "Attachments");
             Directory.CreateDirectory(tempFolder);
 
-            string tempFile = Path.Combine(tempFolder, $"{Guid.NewGuid():N}_{fileName}");
+            string tempFile = Path.Combine(tempFolder, fileName);
             await File.WriteAllBytesAsync(tempFile, bytes);
 
             return tempFile;
