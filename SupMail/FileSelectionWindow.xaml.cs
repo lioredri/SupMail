@@ -87,7 +87,11 @@ namespace SupMail
                         string localPath = await _fileResolver(item.Index);
                         if (!File.Exists(localPath)) continue;
 
-                        var entry = archive.CreateEntry(item.DisplayName);
+                        string entryName = Path.GetFileName(localPath);
+                        if (string.IsNullOrWhiteSpace(entryName))
+                            entryName = item.DisplayName;
+
+                        var entry = archive.CreateEntry(entryName);
                         using var entryStream = entry.Open();
                         using var fileStream = File.OpenRead(localPath);
                         await fileStream.CopyToAsync(entryStream);
