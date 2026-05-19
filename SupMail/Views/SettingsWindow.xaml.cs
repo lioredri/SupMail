@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -6,8 +6,9 @@ using System.Windows;
 using System.Windows.Media;
 using System.Threading;
 using System.IO;
+using SupMail.Services;
 
-namespace SupMail
+namespace SupMail.Views
 {
     public partial class SettingsWindow : Window
     {
@@ -22,7 +23,7 @@ namespace SupMail
             {
                 var logDir = Path.GetDirectoryName(LogFilePath);
                 if (!Directory.Exists(logDir))
-                    Directory.CreateDirectory(logDir);
+                    Directory.CreateDirectory(logDir!);
 
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                 File.AppendAllText(LogFilePath, $"[{timestamp}] {message}\n");
@@ -33,9 +34,9 @@ namespace SupMail
         public SettingsWindow()
         {
             InitializeComponent();
-            txtApiUrl.Text = AppSettings.Current.ApiUrl;
-            txtUser.Text = AppSettings.Current.Username;
-            txtPass.Password = AppSettings.Current.Password;
+            txtApiUrl.Text = SettingsService.Current.ApiUrl;
+            txtUser.Text = SettingsService.Current.Username;
+            txtPass.Password = SettingsService.Current.Password;
         }
 
         private async void btnTest_Click(object sender, RoutedEventArgs e)
@@ -112,24 +113,24 @@ namespace SupMail
 
             if (success == true)
             {
-                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(16, 124, 16));  // green
+                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(16, 124, 16));
                 lblTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(16, 124, 16));
             }
             else if (success == false)
             {
-                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(196, 43, 28));  // red
+                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(196, 43, 28));
                 lblTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(196, 43, 28));
             }
             else
             {
-                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(150, 150, 150)); // grey (in progress)
+                ellipseStatus.Fill = new SolidColorBrush(Color.FromRgb(150, 150, 150));
                 lblTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(100, 100, 100));
             }
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            var settings = new AppSettings
+            var settings = new SettingsService
             {
                 ApiUrl = txtApiUrl.Text.Trim(),
                 Username = txtUser.Text.Trim(),
