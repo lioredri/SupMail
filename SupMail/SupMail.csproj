@@ -8,11 +8,16 @@
 		<UseWPF>true</UseWPF>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<ApplicationIcon>Assets\logo1.ico</ApplicationIcon>
 		<Version>1.2</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="Assets\**" />
 	</ItemGroup>
 
 </Project>
