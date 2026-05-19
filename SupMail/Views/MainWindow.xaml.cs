@@ -70,9 +70,26 @@ namespace SupMail.Views
             var fileItems = new List<FileItem>();
             for (int i = 0; i < attachments.Count; i++)
             {
-                string? displayName = attachments[i]["EXTFILEDES"]?.ToString();
+                string? filePath = attachments[i]["PATH"]?.ToString() ?? attachments[i]["EXTFILENAME"]?.ToString();
+                string? displayName = null;
+
+                // Try to get display name from file path if it exists
+                if (!string.IsNullOrWhiteSpace(filePath) && System.IO.File.Exists(filePath))
+                {
+                    displayName = System.IO.Path.GetFileName(filePath);
+                }
+
+                // Fallback to EXTFILEDES if file not found or path is empty
                 if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    displayName = attachments[i]["EXTFILEDES"]?.ToString();
+                }
+
+                // Final fallback if still no name
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
                     displayName = $"Attachment {i + 1}";
+                }
 
                 string fileSize = GetFileSizeDisplay(attachments[i]);
                 fileItems.Add(new FileItem
