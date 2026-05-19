@@ -4,11 +4,32 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
+using System.Threading;
+using System.IO;
 
 namespace SupMail
 {
     public partial class SettingsWindow : Window
     {
+        private static readonly HttpClient SharedClient = new HttpClient();
+        private static readonly string LogFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SupMail", "connection_test.log");
+
+        private void LogMessage(string message)
+        {
+            try
+            {
+                var logDir = Path.GetDirectoryName(LogFilePath);
+                if (!Directory.Exists(logDir))
+                    Directory.CreateDirectory(logDir);
+
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                File.AppendAllText(LogFilePath, $"[{timestamp}] {message}\n");
+            }
+            catch { }
+        }
+
         public SettingsWindow()
         {
             InitializeComponent();
@@ -29,29 +50,57 @@ namespace SupMail
             btnTest.IsEnabled = false;
             ShowTestStatus(success: null, "Testing...");
 
+            LogMessage("=== Connection Test Started ===");
+            LogMessage($"API URL: {apiUrl}");
+            LogMessage($"Username: {txtUser.Text}");
+
             try
             {
-                using HttpClient client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(10);
                 var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{txtUser.Text}:{txtPass.Password}"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                var requestUrl = $"{apiUrl.TrimEnd('/')}/GetPriorityVersion()";
+                LogMessage($"Request URL: {requestUrl}");
 
-                var response = await client.GetAsync($"{apiUrl.TrimEnd('/')}/");
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                LogMessage("Authorization header set");
+
+                LogMessage("Creating CancellationTokenSource with 10 second timeout");
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+                LogMessage("Sending request...");
+                var startTime = DateTime.Now;
+                var response = await SharedClient.SendAsync(request, cts.Token);
+                var duration = DateTime.Now - startTime;
+
+                LogMessage($"Response received in {duration.TotalMilliseconds:F2}ms");
+                LogMessage($"Status Code: {(int)response.StatusCode} {response.ReasonPhrase}");
+
                 if (response.IsSuccessStatusCode)
+                {
+                    LogMessage("Connection successful");
                     ShowTestStatus(success: true, "Connection successful");
+                }
                 else
-                    ShowTestStatus(success: false, $"Failed \u2014 {(int)response.StatusCode} {response.ReasonPhrase}");
+                {
+                    var errorMsg = $"Failed \u2014 {(int)response.StatusCode} {response.ReasonPhrase}";
+                    LogMessage($"Connection failed: {errorMsg}");
+                    ShowTestStatus(success: false, errorMsg);
+                }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException ex)
             {
+                LogMessage($"OperationCanceledException: {ex.Message}");
                 ShowTestStatus(success: false, "Connection timed out");
             }
             catch (Exception ex)
             {
+                LogMessage($"Exception: {ex.GetType().Name}: {ex.Message}");
+                LogMessage($"Stack trace: {ex.StackTrace}");
                 ShowTestStatus(success: false, ex.Message);
             }
             finally
             {
+                LogMessage("=== Connection Test Ended ===\n");
                 btnTest.IsEnabled = true;
             }
         }
