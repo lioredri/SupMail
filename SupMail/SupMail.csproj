@@ -9,7 +9,7 @@
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 		<ApplicationIcon>Assets\logo1.ico</ApplicationIcon>
-		<Version>1.2</Version>
+		<Version>1.3</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
