@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 using SupMail.Helpers;
 using SupMail.Models;
@@ -12,26 +14,55 @@ namespace SupMail.Views
 {
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        private readonly ErrorHandler _errorHandler;
+        private readonly PriorityApiService _apiService;
+        private readonly Func<AttachmentContext, AttachmentActionWindow> _attachmentWindowFactory;
+
+        public MainWindow(
+            ErrorHandler errorHandler,
+            PriorityApiService apiService,
+            Func<AttachmentContext, AttachmentActionWindow> attachmentWindowFactory)
         {
+            _errorHandler = errorHandler;
+            _apiService = apiService;
+            _attachmentWindowFactory = attachmentWindowFactory;
             InitializeComponent();
+            LoadRecentDocuments();
+        }
+
+        private void LoadRecentDocuments()
+        {
+            cboDocNumber.Items.Clear();
+            foreach (var doc in SettingsService.Current.RecentDocuments)
+            {
+                cboDocNumber.Items.Add(doc);
+            }
+        }
+
+        private void cboDocNumber_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                btnProcess_Click(sender, e);
+                e.Handled = true;
+            }
         }
 
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            SettingsWindow settings = new SettingsWindow();
+            var settings = App.Services.GetRequiredService<SettingsWindow>();
             settings.Owner = this;
             settings.ShowDialog();
         }
 
         private async void btnProcess_Click(object sender, RoutedEventArgs e)
         {
-            string docNum = txtDocNumber.Text.Trim();
+            string docNum = cboDocNumber.Text.Trim();
             if (string.IsNullOrEmpty(docNum)) return;
 
             if (string.IsNullOrEmpty(SettingsService.Current.ApiUrl))
             {
-                MessageBox.Show("Please configure settings first.");
+                _errorHandler.ShowWarning("Please configure settings first.", "Configuration Required");
                 return;
             }
 
@@ -43,7 +74,12 @@ namespace SupMail.Views
                 var context = await BuildAttachmentContextAsync(docNum);
                 lblStatus.Text = "Ready";
 
-                var actionWindow = new AttachmentActionWindow(context);
+                // Add to recent documents
+                SettingsService.Current.AddRecentDocument(docNum);
+                LoadRecentDocuments();
+                cboDocNumber.Text = docNum;
+
+                var actionWindow = _attachmentWindowFactory(context);
                 actionWindow.Owner = this;
                 actionWindow.ShowDialog();
 
@@ -51,7 +87,7 @@ namespace SupMail.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}");
+                _errorHandler.Handle(ex, "API");
                 lblStatus.Text = "Failed.";
             }
             finally
@@ -62,9 +98,7 @@ namespace SupMail.Views
 
         private async Task<AttachmentContext> BuildAttachmentContextAsync(string docNum)
         {
-            var apiService = new PriorityApiService();
-
-            string responseBody = await apiService.GetPurchaseOrderAsync(docNum);
+            string responseBody = await _apiService.GetPurchaseOrderAsync(docNum);
 
             var json = JObject.Parse(responseBody);
             var recipient = json["AMAIL"]?.ToString() ?? "Unknown Recipient";
@@ -111,9 +145,9 @@ namespace SupMail.Views
                 if (string.IsNullOrWhiteSpace(sourcePath))
                     throw new Exception("No path available for this attachment.");
                 if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                    return await apiService.SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                    return await _apiService.SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
                 if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                    return await apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
+                    return await _apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
                 return sourcePath;
             };
 

@@ -9,7 +9,7 @@ using SupMail.Helpers;
 
 namespace SupMail.Services
 {
-    public class PriorityApiService
+    public class PriorityApiService : IDisposable
     {
         private readonly HttpClient _client;
 

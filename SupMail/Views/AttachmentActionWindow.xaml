@@ -4,10 +4,13 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Select Attachments" Height="400" Width="450"
-        WindowStartupLocation="CenterOwner" Background="#F9F9F9" ResizeMode="NoResize">
+        Title="Select Attachments" Height="430" Width="450"
+        WindowStartupLocation="CenterOwner" Background="#F9F9F9" ResizeMode="NoResize"
+        Loaded="Window_Loaded">
     <Grid Margin="25">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -16,10 +19,18 @@
 
         <TextBlock Grid.Row="0" Text="Select files to attach" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,10" Foreground="#1A1A1A"/>
 
-        <CheckBox Grid.Row="1" Name="chkSelectAll" Content="Select All" FontWeight="SemiBold" Margin="0,0,0,10"
+        <TextBlock Grid.Row="1" Name="lblOneDriveAccount" Foreground="#546E7A" FontSize="11" Margin="0,0,0,8" Visibility="Collapsed"/>
+
+        <CheckBox Grid.Row="2" Name="chkSelectAll" Content="Select All" FontWeight="SemiBold" Margin="0,0,0,10"
                   IsChecked="True" Checked="ChkSelectAll_Changed" Unchecked="ChkSelectAll_Changed"/>
 
-        <ListView Grid.Row="2" x:Name="lstFiles" BorderBrush="#CCCCCC" BorderThickness="1" Margin="0,0,0,15"
+        <StackPanel Grid.Row="3" x:Name="uploadProgressPanel" Margin="0,0,0,10" Visibility="Collapsed">
+            <TextBlock x:Name="txtUploadFilesProgress" Foreground="#1A1A1A" FontSize="11"/>
+            <TextBlock x:Name="txtUploadBytesProgress" Foreground="#546E7A" FontSize="11" Margin="0,2,0,4"/>
+            <ProgressBar x:Name="pbUploadBytes" Height="12" Minimum="0" Maximum="100" Value="0"/>
+        </StackPanel>
+
+        <ListView Grid.Row="4" x:Name="lstFiles" BorderBrush="#CCCCCC" BorderThickness="1" Margin="0,0,0,15"
           ScrollViewer.VerticalScrollBarVisibility="Auto" d:ItemsSource="{d:SampleData ItemCount=5}">
             <ListView.View>
                 <GridView>
@@ -36,7 +47,7 @@
             </ListView.View>
         </ListView>
 
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>

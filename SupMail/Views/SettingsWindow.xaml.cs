@@ -12,6 +12,8 @@ namespace SupMail.Views
 {
     public partial class SettingsWindow : Window
     {
+        private readonly OneDriveService _oneDriveService;
+
         private static readonly HttpClient SharedClient = new HttpClient();
         private static readonly string LogFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -31,12 +33,52 @@ namespace SupMail.Views
             catch { }
         }
 
-        public SettingsWindow()
+        public SettingsWindow(OneDriveService oneDriveService)
         {
+            _oneDriveService = oneDriveService;
             InitializeComponent();
             txtApiUrl.Text = SettingsService.Current.ApiUrl;
             txtUser.Text = SettingsService.Current.Username;
             txtPass.Password = SettingsService.Current.Password;
+            LoadOneDriveStatus();
+        }
+
+        private async void LoadOneDriveStatus()
+        {
+            try
+            {
+                var accountName = await _oneDriveService.GetCurrentAccountNameAsync();
+                if (!string.IsNullOrEmpty(accountName))
+                {
+                    lblOneDriveStatus.Text = $"Signed in as: {accountName}";
+                    btnOneDriveSignOut.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    lblOneDriveStatus.Text = "Not signed in";
+                    btnOneDriveSignOut.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch
+            {
+                lblOneDriveStatus.Text = "Not configured";
+                btnOneDriveSignOut.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async void btnOneDriveSignOut_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await _oneDriveService.SignOutAsync();
+                lblOneDriveStatus.Text = "Not signed in";
+                btnOneDriveSignOut.Visibility = Visibility.Collapsed;
+                MessageBox.Show("Successfully signed out of OneDrive.", "Sign Out", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to sign out: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void btnTest_Click(object sender, RoutedEventArgs e)
@@ -134,7 +176,8 @@ namespace SupMail.Views
             {
                 ApiUrl = txtApiUrl.Text.Trim(),
                 Username = txtUser.Text.Trim(),
-                Password = txtPass.Password
+                Password = txtPass.Password,
+                RecentDocuments = SettingsService.Current.RecentDocuments
             };
             settings.Save();
 

@@ -1,4 +1,6 @@
 ﻿using Microsoft.Graph;
+using Microsoft.Graph.Models;
+using Microsoft.Graph.Drives.Item.Items.Item.CreateUploadSession;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Desktop;
 using Microsoft.Identity.Client.Extensions.Msal;
@@ -14,12 +16,12 @@ namespace SupMail.Services
 {
     public class OneDriveService
     {
-        private static readonly string[] Scopes = { "Files.ReadWrite" };
+        private static readonly string[] Scopes = { "Files.ReadWrite", "User.Read" };
 
         private static IPublicClientApplication? _msalClient;
         private static bool _cacheInitialized;
-        private GraphServiceClient? _graphClient;
-        private AuthenticationResult? _authResult;
+        private static GraphServiceClient? _graphClient;
+        private static AuthenticationResult? _authResult;
 
         public OneDriveService()
         {
@@ -87,22 +89,135 @@ namespace SupMail.Services
                 new TokenProvider(_authResult.AccessToken)));
         }
 
-        public async Task UploadFileAsync(string localFilePath, string onedriveFileName, string docNum)
+        public async Task UploadFileAsync(string localFilePath, string onedriveFileName, string docNum, IProgress<long>? progress = null)
         {
             await EnsureAuthenticatedAsync();
 
-            using var fileStream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read);
+            if (!File.Exists(localFilePath))
+                throw new FileNotFoundException($"File not found: {localFilePath}");
 
-            // Get the user's drive
-            var drive = await _graphClient!.Me.Drive.GetAsync();
+            using var fileStream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-            // Upload to SupMail/{DocNum}/{fileName}
+            var drive = await _graphClient!.Me.Drive.GetAsync()
+                ?? throw new InvalidOperationException("Could not access OneDrive.");
+
             string filePath = $"SupMail/{docNum}/{onedriveFileName}";
-            await _graphClient.Drives[drive!.Id]
-                .Items["root"]
-                .ItemWithPath(filePath)
-                .Content
-                .PutAsync(fileStream);
+
+            try
+            {
+                var uploadSessionRequestBody = new CreateUploadSessionPostRequestBody
+                {
+                    Item = new DriveItemUploadableProperties
+                    {
+                        AdditionalData = new Dictionary<string, object>
+                        {
+                            { "@microsoft.graph.conflictBehavior", "replace" }
+                        }
+                    }
+                };
+
+                var uploadSession = await _graphClient.Drives[drive.Id]
+                    .Items["root"]
+                    .ItemWithPath(filePath)
+                    .CreateUploadSession
+                    .PostAsync(uploadSessionRequestBody);
+
+                if (uploadSession == null)
+                    throw new InvalidOperationException("Failed to create OneDrive upload session.");
+
+                int maxSliceSize = 320 * 1024;
+                var uploadTask = new LargeFileUploadTask<DriveItem>(uploadSession, fileStream, maxSliceSize, _graphClient.RequestAdapter);
+                await uploadTask.UploadAsync(progress);
+                return;
+            }
+            catch
+            {
+                // Fall back to direct upload if upload-session flow fails.
+            }
+
+            try
+            {
+                if (fileStream.CanSeek)
+                    fileStream.Position = 0;
+
+                using var progressStream = new ProgressReadStream(fileStream, progress);
+
+                await _graphClient.Drives[drive.Id]
+                    .Items["root"]
+                    .ItemWithPath(filePath)
+                    .Content
+                    .PutAsync(progressStream);
+
+                progress?.Report(fileStream.Length);
+            }
+            catch (Exception ex)
+            {
+                throw new IOException($"Failed to upload '{onedriveFileName}': {ex.Message}", ex);
+            }
+        }
+
+        public async Task<string> GetFolderLinkAsync(string docNum)
+        {
+            await EnsureAuthenticatedAsync();
+
+            var drive = await _graphClient!.Me.Drive.GetAsync()
+                ?? throw new InvalidOperationException("Could not access OneDrive.");
+
+            string folderPath = $"SupMail/{docNum}";
+
+            try
+            {
+                // Get the folder
+                var folder = await _graphClient.Drives[drive.Id]
+                    .Items["root"]
+                    .ItemWithPath(folderPath)
+                    .GetAsync();
+
+                if (folder?.Id == null)
+                    return string.Empty;
+
+                // Create sharing link for the folder
+                var linkRequest = new Microsoft.Graph.Drives.Item.Items.Item.CreateLink.CreateLinkPostRequestBody
+                {
+                    Type = "view",
+                    Scope = "anonymous"
+                };
+
+                var permission = await _graphClient.Drives[drive.Id]
+                    .Items[folder.Id]
+                    .CreateLink
+                    .PostAsync(linkRequest);
+
+                return permission?.Link?.WebUrl ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                // Folder link is optional, don't fail the whole operation
+                System.Diagnostics.Debug.WriteLine($"[OneDrive] Failed to get folder link: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        public async Task<string?> GetCurrentAccountNameAsync()
+        {
+            var msalClient = await GetOrCreateMsalClientAsync();
+            var accounts = await msalClient.GetAccountsAsync();
+            var account = accounts.FirstOrDefault();
+            return account?.Username;
+        }
+
+        public async Task SignOutAsync()
+        {
+            var msalClient = await GetOrCreateMsalClientAsync();
+            var accounts = await msalClient.GetAccountsAsync();
+
+            foreach (var account in accounts)
+            {
+                await msalClient.RemoveAsync(account);
+            }
+
+            _authResult = null;
+            _graphClient = null;
         }
     }
 
@@ -123,6 +238,73 @@ namespace SupMail.Services
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_accessToken);
+        }
+    }
+
+    internal sealed class ProgressReadStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly IProgress<long>? _progress;
+        private long _totalRead;
+
+        public ProgressReadStream(Stream inner, IProgress<long>? progress)
+        {
+            _inner = inner;
+            _progress = progress;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override void Flush() => _inner.Flush();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int read = _inner.Read(buffer, offset, count);
+            Report(read);
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            int read = _inner.Read(buffer);
+            Report(read);
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            int read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
+            Report(read);
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int read = await _inner.ReadAsync(buffer, cancellationToken);
+            Report(read);
+            return read;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        private void Report(int bytesRead)
+        {
+            if (bytesRead <= 0)
+                return;
+
+            _totalRead = Interlocked.Add(ref _totalRead, bytesRead);
+            _progress?.Report(_totalRead);
         }
     }
 }
