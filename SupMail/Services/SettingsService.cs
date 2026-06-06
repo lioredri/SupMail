@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace SupMail.Services
@@ -16,6 +18,22 @@ namespace SupMail.Services
         public string ApiUrl { get; set; } = string.Empty;
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
+        public List<string> RecentDocuments { get; set; } = new();
+
+        public void AddRecentDocument(string docNum)
+        {
+            if (string.IsNullOrWhiteSpace(docNum)) return;
+
+            // Remove if exists, then add to front
+            RecentDocuments.Remove(docNum);
+            RecentDocuments.Insert(0, docNum);
+
+            // Keep only last 10
+            if (RecentDocuments.Count > 10)
+                RecentDocuments = RecentDocuments.Take(10).ToList();
+
+            Save();
+        }
 
         public static SettingsService Load()
         {

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 using SupMail.Helpers;
 using SupMail.Models;
@@ -12,26 +14,55 @@ namespace SupMail.Views
 {
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        private readonly ErrorHandler _errorHandler;
+        private readonly PriorityApiService _apiService;
+        private readonly Func<AttachmentContext, AttachmentActionWindow> _attachmentWindowFactory;
+
+        public MainWindow(
+            ErrorHandler errorHandler,
+            PriorityApiService apiService,
+            Func<AttachmentContext, AttachmentActionWindow> attachmentWindowFactory)
         {
+            _errorHandler = errorHandler;
+            _apiService = apiService;
+            _attachmentWindowFactory = attachmentWindowFactory;
             InitializeComponent();
+            LoadRecentDocuments();
+        }
+
+        private void LoadRecentDocuments()
+        {
+            cboDocNumber.Items.Clear();
+            foreach (var doc in SettingsService.Current.RecentDocuments)
+            {
+                cboDocNumber.Items.Add(doc);
+            }
+        }
+
+        private void cboDocNumber_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                btnProcess_Click(sender, e);
+                e.Handled = true;
+            }
         }
 
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            SettingsWindow settings = new SettingsWindow();
+            var settings = App.Services.GetRequiredService<SettingsWindow>();
             settings.Owner = this;
             settings.ShowDialog();
         }
 
         private async void btnProcess_Click(object sender, RoutedEventArgs e)
         {
-            string docNum = txtDocNumber.Text.Trim();
+            string docNum = cboDocNumber.Text.Trim();
             if (string.IsNullOrEmpty(docNum)) return;
 
             if (string.IsNullOrEmpty(SettingsService.Current.ApiUrl))
             {
-                MessageBox.Show("Please configure settings first.");
+                _errorHandler.ShowWarning("Please configure settings first.", "Configuration Required");
                 return;
             }
 
@@ -40,12 +71,23 @@ namespace SupMail.Views
 
             try
             {
-                await RunPriorityFlow(docNum);
-                lblStatus.Text = "Success!";
+                var context = await BuildAttachmentContextAsync(docNum);
+                lblStatus.Text = "Ready";
+
+                // Add to recent documents
+                SettingsService.Current.AddRecentDocument(docNum);
+                LoadRecentDocuments();
+                cboDocNumber.Text = docNum;
+
+                var actionWindow = _attachmentWindowFactory(context);
+                actionWindow.Owner = this;
+                actionWindow.ShowDialog();
+
+                lblStatus.Text = "Done";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}");
+                _errorHandler.Handle(ex, "API");
                 lblStatus.Text = "Failed.";
             }
             finally
@@ -54,11 +96,9 @@ namespace SupMail.Views
             }
         }
 
-        private async Task RunPriorityFlow(string docNum)
+        private async Task<AttachmentContext> BuildAttachmentContextAsync(string docNum)
         {
-            var apiService = new PriorityApiService();
-
-            string responseBody = await apiService.GetPurchaseOrderAsync(docNum);
+            string responseBody = await _apiService.GetPurchaseOrderAsync(docNum);
 
             var json = JObject.Parse(responseBody);
             var recipient = json["AMAIL"]?.ToString() ?? "Unknown Recipient";
@@ -73,19 +113,16 @@ namespace SupMail.Views
                 string? filePath = attachments[i]["PATH"]?.ToString() ?? attachments[i]["EXTFILENAME"]?.ToString();
                 string? displayName = null;
 
-                // Try to get display name from file path if it exists
-                if (!string.IsNullOrWhiteSpace(filePath) && System.IO.File.Exists(filePath))
+                if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
                 {
-                    displayName = System.IO.Path.GetFileName(filePath);
+                    displayName = Path.GetFileName(filePath);
                 }
 
-                // Fallback to EXTFILEDES if file not found or path is empty
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
                     displayName = attachments[i]["EXTFILEDES"]?.ToString();
                 }
 
-                // Final fallback if still no name
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
                     displayName = $"Attachment {i + 1}";
@@ -108,60 +145,19 @@ namespace SupMail.Views
                 if (string.IsNullOrWhiteSpace(sourcePath))
                     throw new Exception("No path available for this attachment.");
                 if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                    return await apiService.SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
+                    return await _apiService.SaveDataUriToTempFileAsync(sourcePath, file["EXTFILEDES"]?.ToString());
                 if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                    return await apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
+                    return await _apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
                 return sourcePath;
             };
 
-            var selectionWindow = new FileSelectionWindow(fileItems, docNum, fileResolver);
-            selectionWindow.Owner = this;
-            if (selectionWindow.ShowDialog() != true || !selectionWindow.Confirmed)
-                throw new Exception("File selection was cancelled.");
-
-            var selectedIndices = selectionWindow.GetSelectedIndices();
-
-            Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
-            if (outlookType == null) throw new Exception("Outlook is not installed.");
-
-            dynamic outlookApp = Activator.CreateInstance(outlookType)!;
-            dynamic mail = outlookApp.CreateItem(0);
-            mail.To = recipient;
-            mail.Subject = $"Purchase Order {docNum}";
-
-            int addedAttachments = 0;
-            foreach (int idx in selectedIndices)
+            return new AttachmentContext
             {
-                var file = attachments[idx];
-                string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
-                string? displayName = file["EXTFILEDES"]?.ToString();
-                if (string.IsNullOrWhiteSpace(sourcePath))
-                    continue;
-
-                string fullPath = sourcePath;
-                if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    fullPath = await apiService.SaveDataUriToTempFileAsync(sourcePath, displayName);
-                }
-                else if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                {
-                    fullPath = await apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
-                }
-
-                if (File.Exists(fullPath))
-                {
-                    if (!string.IsNullOrWhiteSpace(displayName))
-                        mail.Attachments.Add(fullPath, 1, Type.Missing, displayName);
-                    else
-                        mail.Attachments.Add(fullPath);
-                    addedAttachments++;
-                }
-            }
-
-            if (addedAttachments == 0)
-                throw new Exception("No valid attachment files were found on disk.");
-
-            mail.Display();
+                DocNum = docNum,
+                Recipient = recipient,
+                Files = fileItems,
+                FileResolver = fileResolver
+            };
         }
 
         private static string GetFileSizeDisplay(JToken attachment)
