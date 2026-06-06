@@ -14,7 +14,7 @@
             <TextBlock Text="Document Number" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBox Name="txtDocNumber" Height="35" VerticalContentAlignment="Center" FontSize="16" Margin="0,0,0,15"/>
 
-            <Button Name="btnProcess" Content="Generate Outlook Draft" 
+            <Button Name="btnProcess" Content="Choose Attachments" 
                     Height="40" Background="#0078D4" Foreground="White" BorderThickness="0"
                     Click="btnProcess_Click"/>
 

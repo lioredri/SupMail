@@ -13,11 +13,25 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Azure.Identity" Version="1.21.0" />
+		<PackageReference Include="Microsoft.Graph" Version="6.1.0" />
+		<PackageReference Include="Microsoft.Identity.Client" Version="4.83.1" />
+		<PackageReference Include="Microsoft.Identity.Client.Desktop" Version="4.83.1" />
+		<PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.83.1" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<Resource Include="Assets\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="appsettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="appsettings.json.template">
+			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 </Project>

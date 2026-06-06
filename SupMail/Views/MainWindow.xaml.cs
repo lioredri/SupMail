@@ -40,8 +40,14 @@ namespace SupMail.Views
 
             try
             {
-                await RunPriorityFlow(docNum);
-                lblStatus.Text = "Success!";
+                var context = await BuildAttachmentContextAsync(docNum);
+                lblStatus.Text = "Ready";
+
+                var actionWindow = new AttachmentActionWindow(context);
+                actionWindow.Owner = this;
+                actionWindow.ShowDialog();
+
+                lblStatus.Text = "Done";
             }
             catch (Exception ex)
             {
@@ -54,7 +60,7 @@ namespace SupMail.Views
             }
         }
 
-        private async Task RunPriorityFlow(string docNum)
+        private async Task<AttachmentContext> BuildAttachmentContextAsync(string docNum)
         {
             var apiService = new PriorityApiService();
 
@@ -73,19 +79,16 @@ namespace SupMail.Views
                 string? filePath = attachments[i]["PATH"]?.ToString() ?? attachments[i]["EXTFILENAME"]?.ToString();
                 string? displayName = null;
 
-                // Try to get display name from file path if it exists
-                if (!string.IsNullOrWhiteSpace(filePath) && System.IO.File.Exists(filePath))
+                if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
                 {
-                    displayName = System.IO.Path.GetFileName(filePath);
+                    displayName = Path.GetFileName(filePath);
                 }
 
-                // Fallback to EXTFILEDES if file not found or path is empty
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
                     displayName = attachments[i]["EXTFILEDES"]?.ToString();
                 }
 
-                // Final fallback if still no name
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
                     displayName = $"Attachment {i + 1}";
@@ -114,54 +117,13 @@ namespace SupMail.Views
                 return sourcePath;
             };
 
-            var selectionWindow = new FileSelectionWindow(fileItems, docNum, fileResolver);
-            selectionWindow.Owner = this;
-            if (selectionWindow.ShowDialog() != true || !selectionWindow.Confirmed)
-                throw new Exception("File selection was cancelled.");
-
-            var selectedIndices = selectionWindow.GetSelectedIndices();
-
-            Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
-            if (outlookType == null) throw new Exception("Outlook is not installed.");
-
-            dynamic outlookApp = Activator.CreateInstance(outlookType)!;
-            dynamic mail = outlookApp.CreateItem(0);
-            mail.To = recipient;
-            mail.Subject = $"Purchase Order {docNum}";
-
-            int addedAttachments = 0;
-            foreach (int idx in selectedIndices)
+            return new AttachmentContext
             {
-                var file = attachments[idx];
-                string? sourcePath = file["PATH"]?.ToString() ?? file["EXTFILENAME"]?.ToString();
-                string? displayName = file["EXTFILEDES"]?.ToString();
-                if (string.IsNullOrWhiteSpace(sourcePath))
-                    continue;
-
-                string fullPath = sourcePath;
-                if (sourcePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    fullPath = await apiService.SaveDataUriToTempFileAsync(sourcePath, displayName);
-                }
-                else if (sourcePath.StartsWith("../../system/", StringComparison.OrdinalIgnoreCase))
-                {
-                    fullPath = await apiService.DownloadSystemAttachmentAsync(sourcePath, displayName);
-                }
-
-                if (File.Exists(fullPath))
-                {
-                    if (!string.IsNullOrWhiteSpace(displayName))
-                        mail.Attachments.Add(fullPath, 1, Type.Missing, displayName);
-                    else
-                        mail.Attachments.Add(fullPath);
-                    addedAttachments++;
-                }
-            }
-
-            if (addedAttachments == 0)
-                throw new Exception("No valid attachment files were found on disk.");
-
-            mail.Display();
+                DocNum = docNum,
+                Recipient = recipient,
+                Files = fileItems,
+                FileResolver = fileResolver
+            };
         }
 
         private static string GetFileSizeDisplay(JToken attachment)
