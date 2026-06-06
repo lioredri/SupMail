@@ -42,19 +42,11 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore SupMail/SupMail.csproj -r win-x64
 
-      - name: Create appsettings.json
-        shell: pwsh
-        run: |
-          $config = @{
-            OneDriveClientId = "${{ secrets.ONEDRIVE_CLIENT_ID }}"
-          } | ConvertTo-Json
-          $config | Out-File -FilePath "SupMail/appsettings.json" -Encoding utf8
-
       - name: Build
-        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained
+        run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained -p:OneDriveClientId=${{ secrets.ONEDRIVE_CLIENT_ID }}
 
       - name: Publish
-        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:UseAppHost=true -p:DebugType=none -p:CopyOutputSymbolsToPublishDirectory=false
+        run: dotnet publish SupMail/SupMail.csproj -c Release -o ./publish -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:UseAppHost=true -p:DebugType=none -p:CopyOutputSymbolsToPublishDirectory=false -p:OneDriveClientId=${{ secrets.ONEDRIVE_CLIENT_ID }}
 
       # Use the version in the Release step
       - name: Create GitHub Release
@@ -67,7 +59,7 @@ jobs:
           body: |
             Automated release from master branch
             Commit: ${{ github.sha }}
-            
+
             ## Requirements
             - Windows 10/11 (64-bit)
             - [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime)

@@ -8,7 +8,18 @@ namespace SupMail.Services
     {
         private static JObject? _config;
 
-        public static string OneDriveClientId => GetValue("OneDriveClientId");
+        public static string OneDriveClientId
+        {
+            get
+            {
+                // First try build-time embedded secret
+                if (!string.IsNullOrWhiteSpace(AppSecrets.OneDriveClientId))
+                    return AppSecrets.OneDriveClientId;
+
+                // Fallback to appsettings.json for local development
+                return GetValue("OneDriveClientId");
+            }
+        }
 
         private static string GetValue(string key)
         {

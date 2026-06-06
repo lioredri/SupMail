@@ -10,6 +10,8 @@
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 		<ApplicationIcon>Assets\logo1.ico</ApplicationIcon>
 		<Version>2.0</Version>
+		<!-- OneDrive Client ID - injected at build time via -p:OneDriveClientId=xxx -->
+		<OneDriveClientId Condition="'$(OneDriveClientId)' == ''"></OneDriveClientId>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -27,13 +29,21 @@
 		<Resource Include="Assets\**" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<None Update="appsettings.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="appsettings.json.template">
-			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
+	<!-- Generate a constants file with embedded config -->
+	<Target Name="GenerateAppSecrets" BeforeTargets="CoreCompile">
+		<PropertyGroup>
+			<AppSecretsFile>$(IntermediateOutputPath)AppSecrets.g.cs</AppSecretsFile>
+		</PropertyGroup>
+		<ItemGroup>
+			<Compile Include="$(AppSecretsFile)" Condition="Exists('$(AppSecretsFile)')" />
+		</ItemGroup>
+		<WriteLinesToFile
+			File="$(AppSecretsFile)"
+			Overwrite="true"
+			Lines="namespace SupMail.Services { internal static class AppSecrets { public const string OneDriveClientId = &quot;$(OneDriveClientId)&quot;%3B } }" />
+		<ItemGroup>
+			<Compile Include="$(AppSecretsFile)" />
+		</ItemGroup>
+	</Target>
 
 </Project>
