@@ -2,7 +2,6 @@
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using SupMail.Models;
 using SupMail.Services;
 using SupMail.Views;
@@ -11,38 +10,33 @@ namespace SupMail
 {
     public partial class App : Application
     {
-        private readonly IHost _host;
-
         public static IServiceProvider Services { get; private set; } = null!;
 
         public App()
         {
-            _host = Host.CreateDefaultBuilder()
-                .ConfigureServices(services =>
-                {
-                    // Register services
-                    services.AddSingleton<ErrorHandler>();
-                    services.AddSingleton<OneDriveService>();
-                    services.AddTransient<OutlookService>();
-                    services.AddTransient<ZipService>();
-                    services.AddTransient<PriorityApiService>();
+            var services = new ServiceCollection();
 
-                    // Register windows
-                    services.AddTransient<MainWindow>();
-                    services.AddTransient<SettingsWindow>();
+            // Register services
+            services.AddSingleton<ErrorHandler>();
+            services.AddSingleton<OneDriveService>();
+            services.AddTransient<OutlookService>();
+            services.AddTransient<ZipService>();
+            services.AddTransient<PriorityApiService>();
 
-                    // Register factory for AttachmentActionWindow (needs runtime AttachmentContext)
-                    services.AddTransient<Func<AttachmentContext, AttachmentActionWindow>>(sp =>
-                        context => new AttachmentActionWindow(
-                            context,
-                            sp.GetRequiredService<OutlookService>(),
-                            sp.GetRequiredService<ZipService>(),
-                            sp.GetRequiredService<OneDriveService>(),
-                            sp.GetRequiredService<ErrorHandler>()));
-                })
-                .Build();
+            // Register windows
+            services.AddTransient<MainWindow>();
+            services.AddTransient<SettingsWindow>();
 
-            Services = _host.Services;
+            // Register factory for AttachmentActionWindow (needs runtime AttachmentContext)
+            services.AddTransient<Func<AttachmentContext, AttachmentActionWindow>>(sp =>
+                context => new AttachmentActionWindow(
+                    context,
+                    sp.GetRequiredService<OutlookService>(),
+                    sp.GetRequiredService<ZipService>(),
+                    sp.GetRequiredService<OneDriveService>(),
+                    sp.GetRequiredService<ErrorHandler>()));
+
+            Services = services.BuildServiceProvider();
         }
 
         protected override void OnStartup(StartupEventArgs e)

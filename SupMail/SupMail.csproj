@@ -17,7 +17,6 @@
 	<ItemGroup>
 		<PackageReference Include="Azure.Identity" Version="1.21.0" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
 		<PackageReference Include="Microsoft.Graph" Version="6.1.0" />
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.83.1" />
 		<PackageReference Include="Microsoft.Identity.Client.Desktop" Version="4.83.1" />
