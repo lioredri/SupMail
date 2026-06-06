@@ -42,6 +42,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore SupMail/SupMail.csproj -r win-x64
 
+      - name: Create appsettings.json
+        shell: pwsh
+        run: |
+          $config = @{
+            OneDriveClientId = "${{ secrets.ONEDRIVE_CLIENT_ID }}"
+          } | ConvertTo-Json
+          $config | Out-File -FilePath "SupMail/appsettings.json" -Encoding utf8
+
       - name: Build
         run: dotnet build SupMail/SupMail.csproj --configuration Release --no-restore -r win-x64 --no-self-contained -p:OneDriveClientId=${{ secrets.ONEDRIVE_CLIENT_ID }}
 
