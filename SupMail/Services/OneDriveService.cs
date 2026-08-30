@@ -91,6 +91,7 @@ namespace SupMail.Services
 
         public async Task UploadFileAsync(string localFilePath, string onedriveFileName, string docNum, IProgress<long>? progress = null)
         {
+            
             await EnsureAuthenticatedAsync();
 
             if (!File.Exists(localFilePath))
@@ -116,14 +117,26 @@ namespace SupMail.Services
                     }
                 };
 
+                try
+                {
+                    await _graphClient.Drives[drive.Id]
+                        .Items["root"]
+                        .ItemWithPath(filePath)
+                        .DeleteAsync();
+                }
+                catch (Microsoft.Graph.Models.ODataErrors.ODataError ex)
+                {
+                    // File doesn't exist -> that's fine
+                    if (ex.ResponseStatusCode != 404)
+                        throw;
+                }
+
+                // Upload
                 var uploadSession = await _graphClient.Drives[drive.Id]
                     .Items["root"]
                     .ItemWithPath(filePath)
                     .CreateUploadSession
                     .PostAsync(uploadSessionRequestBody);
-
-                if (uploadSession == null)
-                    throw new InvalidOperationException("Failed to create OneDrive upload session.");
 
                 int maxSliceSize = 320 * 1024;
                 var uploadTask = new LargeFileUploadTask<DriveItem>(uploadSession, fileStream, maxSliceSize, _graphClient.RequestAdapter);
