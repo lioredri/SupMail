@@ -189,6 +189,9 @@ namespace SupMail.Views
                 long totalBytes = uploadItems.Sum(i => i.Size);
                 InitializeUploadProgress(selectedFiles, totalBytes);
 
+                if (selectedFiles > 0)
+                    await _oneDriveService.ResetDocumentFolderAsync(_context.DocNum);
+
                 // Upload only available files with byte-level progress updates
                 foreach (var item in uploadItems.Select((value, index) => (value, index)))
                 {
